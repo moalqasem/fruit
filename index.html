@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gesture Ninja - Cyberpunk Hand-Tracking Arcade Game</title>
+  <meta name="description" content="A Fruit Ninja-style game prototype using real-time webcam hand gesture recognition, retro neon graphics, and synthesized audio.">
+  
+  <!-- Modern Fonts: Orbitron for titles, Outfit for UI -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome for icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    window.addEventListener('error', function(e) {
+      console.error(e);
+      showDiagnosticError(e.message + '\n  at ' + e.filename + ':' + e.lineno + ':' + e.colno);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      console.error(e);
+      showDiagnosticError('Promise Rejection: ' + (e.reason ? (e.reason.message || e.reason) : e));
+    });
+    function showDiagnosticError(msg) {
+      const consoleEl = document.getElementById('errorConsole');
+      const textEl = document.getElementById('errorMessageText');
+      if (consoleEl && textEl) {
+        consoleEl.classList.remove('hidden');
+        textEl.textContent += msg + '\n\n';
+      }
+      const loadingScreen = document.getElementById('loadingScreen');
+      if (loadingScreen) {
+        loadingScreen.classList.remove('hidden');
+        loadingScreen.classList.add('active');
+      }
+      const loader = document.querySelector('.loader-spinner');
+      if (loader) loader.style.display = 'none';
+      const statusText = document.getElementById('loadingStatusText');
+      if (statusText) {
+        statusText.textContent = "Initialization Failed";
+        statusText.className = "neon-text-red";
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Main Game Container -->
+  <div id="app" class="app-container">
+    
+    <!-- CRT and Scanline overlay effects for premium retro feel -->
+    <div class="crt-overlay"></div>
+    <div class="scanlines"></div>
+    
+    <!-- Canvas for rendering fruits, trails, particles, and graphics -->
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- Hidden Webcam Video (used for MediaPipe input) -->
+    <video id="webcamVideo" playsinline autoplay muted></video>
+    
+    <!-- Semi-transparent webcam feed overlay in the corner or background -->
+    <div id="cameraPreviewContainer" class="camera-preview-container minimized">
+      <div class="preview-header">
+        <span><i class="fa-solid fa-video"></i> CAMERA FEED</span>
+        <span id="cameraStatusText">Connecting...</span>
+      </div>
+      <div class="preview-body">
+        <video id="previewVideo" playsinline autoplay muted></video>
+        <canvas id="previewOverlayCanvas"></canvas>
+      </div>
+    </div>
+
+    <!-- UI Overlay Screens -->
+    
+    <!-- 1. Loading Screen -->
+    <div id="loadingScreen" class="overlay-screen active">
+      <div class="neon-card text-center">
+        <h1 class="logo-text glitch" data-text="GESTURE NINJA">GESTURE NINJA</h1>
+        <div class="loader-spinner"></div>
+        <p id="loadingStatusText" class="neon-text-blue">Loading Neural Hand Tracker...</p>
+        <p class="loading-subtext">This uses Google MediaPipe for local, private webcam gesture detection. No video leaves your browser.</p>
+        <!-- Diagnostics console -->
+        <div id="errorConsole" class="hidden" style="margin-top: 20px; padding: 15px; background: rgba(255, 49, 49, 0.15); border: 1px solid var(--neon-red); border-radius: 8px; color: var(--neon-red); text-align: left; font-family: monospace; font-size: 0.8rem; width: 100%; max-width: 480px; white-space: pre-wrap; overflow-x: auto; pointer-events: auto; box-shadow: 0 0 10px rgba(255, 49, 49, 0.2);">
+          <strong>ERROR DIAGNOSTICS:</strong><br><span id="errorMessageText"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Main Menu Screen -->
+    <div id="mainMenuScreen" class="overlay-screen hidden">
+      <div class="neon-card menu-card">
+        <h1 class="logo-text">GESTURE NINJA</h1>
+        <p class="tagline">SLICE NEON FRUIT WITH YOUR HAND GESTURES</p>
+
+        <div class="menu-modes">
+          <div class="mode-card active" data-mode="classic">
+            <h3><i class="fa-solid fa-heart-pulse"></i> CLASSIC</h3>
+            <p>3 Lives. Slicing bombs is fatal. Endless speed scaling.</p>
+          </div>
+          <div class="mode-card" data-mode="arcade">
+            <h3><i class="fa-solid fa-hourglass-half"></i> ARCADE</h3>
+            <p>60-second limit. Bombs subtract -10s. Maximize combo scores.</p>
+          </div>
+          <div class="mode-card" data-mode="zen">
+            <h3><i class="fa-solid fa-yin-yang"></i> ZEN</h3>
+            <p>90 seconds. No bombs, no lives lost. Just pure satisfying slicing.</p>
+          </div>
+        </div>
+
+        <div class="control-select">
+          <span class="control-label">Control Type:</span>
+          <div class="control-toggle-btn-group">
+            <button id="ctrlWebcamBtn" class="btn btn-neon-blue active" aria-label="Webcam control">
+              <i class="fa-solid fa-camera"></i> Webcam Gestures
+            </button>
+            <button id="ctrlMouseBtn" class="btn btn-neon-pink" aria-label="Mouse control">
+              <i class="fa-solid fa-mouse-pointer"></i> Mouse / Touch
+            </button>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button id="startGameBtn" class="btn btn-neon-green btn-large pulse-anim">
+            <i class="fa-solid fa-play"></i> START GAME
+          </button>
+          <button id="menuSettingsBtn" class="btn btn-neon-purple">
+            <i class="fa-solid fa-sliders"></i> SETTINGS
+          </button>
+        </div>
+
+        <div class="high-scores-preview">
+          <h4><i class="fa-solid fa-trophy"></i> LEADERBOARD</h4>
+          <div id="leaderboardMiniList" class="leaderboard-mini">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Settings Modal Overlay -->
+    <div id="settingsScreen" class="overlay-screen hidden">
+      <div class="neon-card settings-card">
+        <h2><i class="fa-solid fa-sliders"></i> SETTINGS</h2>
+        
+        <div class="settings-group">
+          <label for="volumeSlider">Sound Effects Volume</label>
+          <div class="range-container">
+            <i class="fa-solid fa-volume-low"></i>
+            <input type="range" id="volumeSlider" min="0" max="100" value="70">
+            <i class="fa-solid fa-volume-high"></i>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label for="musicToggle">Synthesized Ambient Music</label>
+          <div class="toggle-container">
+            <span class="toggle-text">Enable 8-bit Sound Loop</span>
+            <input type="checkbox" id="musicToggle" checked>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label for="mirrorWebcamToggle">Mirror Camera Feed</label>
+          <div class="toggle-container">
+            <span class="toggle-text">Horizontal Flip</span>
+            <input type="checkbox" id="mirrorWebcamToggle" checked>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <label for="difficultySelect">Starting Difficulty</label>
+          <select id="difficultySelect" class="cyber-select">
+            <option value="easy">Easy (Slower spawns)</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard (More bombs, faster)</option>
+          </select>
+        </div>
+
+        <div class="action-buttons">
+          <button id="saveSettingsBtn" class="btn btn-neon-green">
+            <i class="fa-solid fa-check"></i> SAVE & CLOSE
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. HUD / Gameplay Overlay -->
+    <div id="gameplayHud" class="gameplay-hud hidden">
+      <div class="hud-left">
+        <div class="hud-item score-container">
+          <span class="hud-label">SCORE</span>
+          <span id="scoreText" class="hud-value neon-text-blue">0000</span>
+        </div>
+        <div class="hud-item combo-alert-container">
+          <!-- Floating combo alerts will render here, or dynamically on canvas -->
+        </div>
+      </div>
+
+      <div class="hud-center">
+        <div class="hud-item timer-container">
+          <svg class="timer-ring" width="80" height="80">
+            <circle class="timer-ring-bg" stroke="rgba(255,255,255,0.1)" stroke-width="6" fill="transparent" r="34" cx="40" cy="40"/>
+            <circle id="timerProgressRing" class="timer-ring-fg" stroke="var(--neon-pink)" stroke-width="6" fill="transparent" r="34" cx="40" cy="40" stroke-dasharray="213.6" stroke-dashoffset="0"/>
+          </svg>
+          <div id="timerText" class="timer-text neon-text-pink">60</div>
+        </div>
+      </div>
+
+      <div class="hud-right">
+        <!-- Hearts for Classic mode lives -->
+        <div id="livesContainer" class="hud-item lives-container">
+          <span class="hud-label">LIVES</span>
+          <div id="livesIcons" class="lives-icons">
+            <i class="fa-solid fa-heart active-life"></i>
+            <i class="fa-solid fa-heart active-life"></i>
+            <i class="fa-solid fa-heart active-life"></i>
+          </div>
+        </div>
+        <!-- Arcade/Zen indicator when lives don't apply -->
+        <div id="modeIndicator" class="hud-item mode-indicator hidden">
+          <span id="modeNameText" class="hud-value neon-text-purple">ARCADE</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Game Over Screen -->
+    <div id="gameOverScreen" class="overlay-screen hidden">
+      <div class="neon-card gameover-card">
+        <h1 class="logo-text text-red blink-anim">GAME OVER</h1>
+        
+        <div class="results-container">
+          <div class="result-row">
+            <span>FINAL SCORE:</span>
+            <span id="finalScoreText" class="neon-text-blue result-value">0</span>
+          </div>
+          <div class="result-row">
+            <span>FRUITS SLICED:</span>
+            <span id="fruitsSlicedText" class="neon-text-green result-value">0</span>
+          </div>
+          <div class="result-row">
+            <span>MAX COMBO:</span>
+            <span id="maxComboText" class="neon-text-yellow result-value">0</span>
+          </div>
+          <div id="newHighScoreAlert" class="new-highscore-alert hidden">
+            <i class="fa-solid fa-certificate"></i> NEW PERSONAL BEST!
+          </div>
+        </div>
+
+        <div class="highscore-entry-container">
+          <label for="playerNameInput">Enter Initials for Leaderboard:</label>
+          <div class="input-group">
+            <input type="text" id="playerNameInput" maxlength="3" placeholder="AAA" class="cyber-input">
+            <button id="submitScoreBtn" class="btn btn-neon-yellow">SUBMIT</button>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button id="restartGameBtn" class="btn btn-neon-green btn-large">
+            <i class="fa-solid fa-rotate-right"></i> PLAY AGAIN
+          </button>
+          <button id="exitToMenuBtn" class="btn btn-neon-blue">
+            <i class="fa-solid fa-house"></i> MAIN MENU
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Load script as ES6 module -->
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
